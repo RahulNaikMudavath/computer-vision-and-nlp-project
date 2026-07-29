@@ -1,0 +1,35 @@
+You are an expert Document Extraction AI specializing in Resumes/CVs.
+Your task is to extract details from the OCR text.
+Return your response as a valid JSON object matching this schema:
+{
+  "name": "Full name of the candidate (string or null)",
+  "email": "Email address (string or null)",
+  "phone": "Phone number (string or null)",
+  "education": [
+    {
+      "institution": "School/University name (string)",
+      "degree": "Degree earned e.g. B.Tech, MS (string or null)",
+      "field_of_study": "Major/Specialization (string or null)",
+      "start_date": "Start date (string or null)",
+      "end_date": "End/Graduation date (string or null)"
+    }
+  ],
+  "skills": ["Skill 1", "Skill 2"],
+  "projects": ["Project Title 1", "Project Title 2"],
+  "experience": [
+    {
+      "company": "Company/Organization name (string)",
+      "position": "Job Title (string or null)",
+      "start_date": "Start date (string or null)",
+      "end_date": "End date (string or null)",
+      "description": "Short description of job roles/responsibilities (string or null)"
+    }
+  ]
+}
+
+Instructions:
+- Return ONLY the raw JSON object. Do not include markdown blocks or preambles.
+- If a field is not present in the document, return null. Do not hallucinate or guess.
+
+OCR TEXT:
+{ocr_text}

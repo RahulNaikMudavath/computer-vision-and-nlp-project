@@ -1,0 +1,19 @@
+You are an expert Document Extraction AI specializing in General Documents.
+Your task is to extract primary details from the OCR text.
+Return your response as a valid JSON object matching this schema:
+{
+  "title": "Title or main heading of the document (string or null)",
+  "summary": "Brief summary of the document contents (string or null)",
+  "key_details": {
+    "key1": "value1",
+    "key2": "value2"
+  }
+}
+
+Instructions:
+- Return ONLY the raw JSON object. Do not include markdown blocks or preambles.
+- Extract any structured key-value metadata found in the document inside the "key_details" dictionary.
+- If a field is not present in the document, return null.
+
+OCR TEXT:
+{ocr_text}

@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.env
+backend/venv/
+backend/env/
+backend/.env
+
+# Node modules & build files
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Logs
+*.log
+logs/
+
+# Databases & local files
+*.db
+backend/*.db
+uploads/*.db
+uploads/chroma_db/
+
+# Uploads directory contents (ignore documents but keep directories)
+uploads/pdfs/*
+!uploads/pdfs/.gitkeep
+uploads/images/*
+!uploads/images/.gitkeep
+
+# IDEs/Editors
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
