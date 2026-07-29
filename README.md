@@ -17,10 +17,10 @@ erDiagram
 
     User {
         int id PK
-        string email UNIQUE
+        string email UK
         string hashed_password
         string full_name
-        string role "Admin | Standard User"
+        string role "Admin / Standard User"
         string avatar_url
         boolean is_active
         datetime created_at
@@ -29,7 +29,7 @@ erDiagram
     UserSettings {
         int id PK
         int user_id FK
-        string theme "light | dark"
+        string theme "light / dark"
         string language
         string default_ocr_language
         boolean email_notifications
@@ -41,9 +41,9 @@ erDiagram
         string original_filename
         string file_type
         int size_bytes
-        string ocr_status "PENDING | COMPLETED | FAILED"
-        string processing_status "IDLE | PROCESSING | COMPLETED | FAILED"
-        string document_type "Invoice | Receipt | Passport | etc"
+        string ocr_status "PENDING / COMPLETED / FAILED"
+        string processing_status "IDLE / PROCESSING / COMPLETED / FAILED"
+        string document_type "Invoice / Receipt / Passport / etc"
         float confidence_score
         string ocr_text
         int uploaded_by FK
