@@ -143,8 +143,10 @@ function App() {
     let reconnectTimeout;
     
     const connectWs = () => {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//localhost:8000/ws/${userProfile.id}`;
+      const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+      const wsProtocol = cleanBaseUrl.startsWith('https') ? 'wss:' : 'ws:';
+      const wsHost = cleanBaseUrl.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}//${wsHost}/ws/${userProfile.id}`;
       console.log('Connecting to WebSocket channel:', wsUrl);
       
       socket = new WebSocket(wsUrl);

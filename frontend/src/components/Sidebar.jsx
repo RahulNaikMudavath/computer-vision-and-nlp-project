@@ -63,7 +63,7 @@ function Sidebar({ currentView, setCurrentView, userProfile, handleLogout }) {
             {userProfile?.avatar_url ? (
               <img src={userProfile.avatar_url} alt="avatar" />
             ) : (
-              userProfile?.email.slice(0, 2).toUpperCase()
+              (userProfile?.email || '').slice(0, 2).toUpperCase()
             )}
           </div>
           <div className="user-info">
