@@ -39,7 +39,7 @@ class User(Base):
     role = Column(String(50), default="Standard User", nullable=False) # "Admin" or "Standard User"
     avatar_url = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
     settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -75,7 +75,7 @@ class Document(Base):
     confidence_score = Column(Float, default=1.0, nullable=False)
     ocr_text = Column(Text, nullable=True)
     uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
     owner = relationship("User", back_populates="documents")
@@ -101,12 +101,12 @@ class ChatHistory(Base):
     __tablename__ = "chat_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     sources = Column(Text, nullable=True)  # JSON-serialized source array
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
     document = relationship("Document", back_populates="chats")

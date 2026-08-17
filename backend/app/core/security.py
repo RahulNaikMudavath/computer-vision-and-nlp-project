@@ -1,8 +1,9 @@
 import logging
 import datetime
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
+from typing import Optional
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -25,9 +26,9 @@ def create_access_token(data: dict, expires_delta: datetime.timedelta = None) ->
     """Creates a JWT access token expiring in 15 minutes."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.datetime.utcnow() + expires_delta
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + expires_delta
     else:
-        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
@@ -36,9 +37,9 @@ def create_refresh_token(data: dict, expires_delta: datetime.timedelta = None) -
     """Creates a JWT refresh token expiring in 7 days."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.datetime.utcnow() + expires_delta
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + expires_delta
     else:
-        expire = datetime.datetime.utcnow() + datetime.timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_REFRESH_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
@@ -61,9 +62,13 @@ def decode_token(token: str, secret_key: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    token_query: Optional[str] = Query(None, alias="token"),
+    db: Session = Depends(get_db)
+) -> User:
     """
-    FastAPI dependency. Extracts JWT payload from Authorization header,
+    FastAPI dependency. Extracts JWT payload from Authorization header or token query parameter,
     verifies user active states, and returns the User object.
     """
     credentials_exception = HTTPException(
@@ -71,11 +76,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         detail="Could not validate credentials. Access token missing or invalid.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not token:
+    actual_token = token or token_query
+    if not actual_token:
         raise credentials_exception
         
     try:
-        payload = decode_token(token, settings.JWT_SECRET_KEY)
+        payload = decode_token(actual_token, settings.JWT_SECRET_KEY)
         email: str = payload.get("sub")
         token_type: str = payload.get("type")
         if email is None or token_type != "access":

@@ -20,6 +20,24 @@ class SourceChunk(BaseModel):
         ...,
         description="The index of the chunk on the page or document."
     )
+    document_id: Optional[str] = Field(
+        None,
+        description="The unique UUID of the source document."
+    )
+    filename: Optional[str] = Field(
+        None,
+        description="The filename of the source document."
+    )
+
+class MultiDocumentChatRequest(BaseModel):
+    document_ids: List[str] = Field(
+        ...,
+        description="The list of unique UUIDs of the uploaded documents."
+    )
+    question: str = Field(
+        ...,
+        description="The natural language question to ask across the documents."
+    )
 
 class DocumentChatResponse(BaseModel):
     success: bool = Field(

@@ -228,6 +228,38 @@ def validate_document_upload(file: UploadFile) -> None:
             message=f"File extension '{ext}' is not allowed. Supported formats are: PDF, PNG, JPG, JPEG"
         )
 
+
+def is_allowed_file(filename: str) -> bool:
+    """Return True for supported image or PDF filenames."""
+    if not filename:
+        return False
+    _, ext = os.path.splitext(filename.lower())
+    return ext == ".pdf" or ext in ALLOWED_EXTENSIONS
+
+
+async def save_upload_file(file: UploadFile, destination_dir: str) -> str:
+    """
+    Save an uploaded file to destination_dir and return the absolute path.
+    This helper is generic for image or PDF uploads.
+    """
+    os.makedirs(destination_dir, exist_ok=True)
+    filename = file.filename or "upload"
+    unique_filename = f"{uuid.uuid4()}{os.path.splitext(filename)[1].lower()}"
+    dest_path = os.path.join(destination_dir, unique_filename)
+
+    total_bytes = 0
+    chunk_size = 1024 * 1024
+    with open(dest_path, "wb") as buffer:
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            buffer.write(chunk)
+
+    return os.path.abspath(dest_path)
+
+
 async def save_document_securely(file: UploadFile) -> tuple[str, str]:
     """
     Saves an uploaded PDF or image file securely checking the respective size limits:

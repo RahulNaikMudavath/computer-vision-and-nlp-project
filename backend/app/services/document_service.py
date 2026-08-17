@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional, Type
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
-from app.services.vlm_service import vlm_service
+from app.services.vlm_service import vlm_service, _HAS_GEMINI
 from app.services.prompt_manager import prompt_manager
 from app.exceptions.handlers import VLMInferenceException
 
@@ -204,7 +204,7 @@ class DocumentService:
         """
         Classifies OCR text into one of the supported types.
         """
-        if settings.MOCK_VLM:
+        if settings.MOCK_VLM and not _HAS_GEMINI:
             # Local developer mock classification based on filename hints
             fn_lower = filename.lower()
             if "invoice" in fn_lower:
@@ -255,7 +255,7 @@ class DocumentService:
         """
         Runs the extraction prompt for the resolved strategy and validates the output using Pydantic.
         """
-        if settings.MOCK_VLM:
+        if settings.MOCK_VLM and not _HAS_GEMINI:
             # Return high-fidelity placeholder schema data for local development
             return self._generate_mock_schema_data(strategy.document_type, filename)
 

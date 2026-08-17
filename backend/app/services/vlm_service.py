@@ -1,13 +1,27 @@
 import time
 import logging
-import torch
+import os
+import asyncio
+import warnings
 from PIL import Image
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-from qwen_vl_utils import process_vision_info
 from app.core.config import settings
 from app.exceptions.handlers import VLMInferenceException, VLMModelLoadingException
 
 logger = logging.getLogger("document_ocr.vlm_service")
+
+# Configure Gemini API if available
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+_HAS_GEMINI = False
+if GEMINI_API_KEY:
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning)
+            import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        _HAS_GEMINI = True
+        logger.info("Gemini API configured as primary service engine for VLMService.")
+    except ImportError:
+        pass
 
 class VLMService:
     """
@@ -17,6 +31,14 @@ class VLMService:
     def __init__(self) -> None:
         self.model = None
         self.processor = None
+        
+        if settings.MOCK_VLM:
+            self.device = "cpu"
+            self.torch_dtype = None
+            logger.info("VLM service initialized in Mock mode.")
+            return
+
+        import torch
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.torch_dtype = torch.float32
         
@@ -39,6 +61,11 @@ class VLMService:
         if settings.MOCK_VLM:
             logger.info("MOCK_VLM is enabled. Skipping Hugging Face model download and load.")
             return
+
+        import torch
+        from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+        
+        logger.info(f"Initiating VLM model load: {settings.MODEL_ID} on device: {self.device}")
 
         logger.info(f"Initiating VLM model load: {settings.MODEL_ID} on device: {self.device}")
         start_time = time.time()
@@ -71,11 +98,68 @@ class VLMService:
             logger.error(f"Failed to load VLM model: {str(e)}")
             raise VLMModelLoadingException(f"Startup model load failed for '{settings.MODEL_ID}': {str(e)}")
 
+    async def _generate_content_with_fallback(self, contents) -> Any:
+        from google.api_core import exceptions as google_exceptions
+        candidate_models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"]
+        last_error = None
+        for model_name in candidate_models:
+            try:
+                logger.info(f"Attempting inference with Gemini model: {model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.to_thread(model.generate_content, contents)
+                logger.info(f"Successfully completed inference with model: {model_name}")
+                return response
+            except (google_exceptions.ResourceExhausted, google_exceptions.ClientError) as err:
+                logger.warning(f"Gemini model {model_name} failed (error/quota): {str(err)}. Retrying with next candidate...")
+                last_error = err
+            except Exception as err:
+                logger.warning(f"Gemini model {model_name} encountered error: {str(err)}. Retrying with next candidate...")
+                last_error = err
+        raise last_error
+
+    async def _perform_ocr_gemini(self, image: Image.Image) -> str:
+        """Runs OCR using the Gemini API with automatic fallback."""
+        try:
+            # Ensure image is in standard RGB format
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+                
+            response = await self._generate_content_with_fallback(
+                [
+                    "You are an expert OCR engine. Transcribe all text from this document image exactly as it appears. Do not summarize, do not add commentary.",
+                    image
+                ]
+            )
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini OCR failed: {str(e)}")
+            raise VLMInferenceException(f"Gemini OCR failed: {str(e)}")
+
+    async def _run_inference_gemini(self, prompt: str, image: Image.Image = None) -> str:
+        """Runs vision-language generation using the Gemini API with automatic fallback."""
+        try:
+            contents = []
+            if image is not None:
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+                contents.append(image)
+            contents.append(prompt)
+            
+            response = await self._generate_content_with_fallback(contents)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini Inference failed: {str(e)}")
+            raise VLMInferenceException(f"Gemini Inference failed: {str(e)}")
+
     async def perform_ocr(self, image: Image.Image) -> str:
         """
         Runs inference on the provided PIL image using a structured prompt to perform raw text extraction.
         Returns the extracted text as a string.
         """
+        if _HAS_GEMINI:
+            logger.info("Using Gemini API for OCR.")
+            return await self._perform_ocr_gemini(image)
+
         if settings.MOCK_VLM:
             import asyncio
             logger.info("MOCK_VLM is enabled. Simulating OCR inference and returning mock text.")
@@ -183,6 +267,10 @@ class VLMService:
         Runs a general text or vision-language inference using the loaded Qwen2.5-VL model.
         Returns the decoded output string.
         """
+        if _HAS_GEMINI:
+            logger.info("Using Gemini API for LLM generation.")
+            return await self._run_inference_gemini(prompt, image)
+
         if settings.MOCK_VLM:
             logger.info("MOCK_VLM is enabled. Skipping model inference.")
             return ""

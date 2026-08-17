@@ -18,6 +18,7 @@ from app.services.vlm_service import vlm_service
 from app.services.document_service import document_service
 from app.services.chunk_service import chunk_service
 from app.services.vector_service import vector_service
+from app.services.ocr import extract_text_from_image_local
 from app.exceptions.handlers import InvalidImageException
 
 logger = logging.getLogger("document_ocr.api.document_routes")

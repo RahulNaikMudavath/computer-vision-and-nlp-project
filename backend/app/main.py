@@ -73,6 +73,20 @@ async def lifespan(app: FastAPI):
         
         # Create database tables (SQLite/PostgreSQL)
         logger.info("Verifying database schema. Standard schema creation active as fallback...")
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                res = conn.execute(text("PRAGMA table_info(chat_history);")).fetchall()
+                if res:
+                    for col in res:
+                        if col[1] == "document_id" and col[3] == 1:
+                            logger.info("Outdated schema detected: dropping chat_history to apply nullable=True column updates...")
+                            conn.execute(text("DROP TABLE chat_history;"))
+                            conn.commit()
+                            break
+        except Exception as e:
+            logger.warning(f"Schema pre-check skipped: {str(e)}")
+            
         Base.metadata.create_all(bind=engine)
         logger.info("Database initialized. (Note: Use Alembic migrations in production environment: 'alembic upgrade head')")
         
@@ -81,14 +95,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to create upload directories, database, or initialize VectorDB: {str(e)}")
     
-    # 2. Load the VLM model once into VRAM/RAM and cache prompt files
+    # 2. Load prompt templates and VLM model only when explicitly enabled.
+    # This keeps local auth/login flows available even when the heavyweight model download or GPU setup fails.
     try:
         prompt_manager.load_prompts()
-        # Load the Hugging Face model and processor
-        vlm_service.load_model()
+        if settings.MOCK_VLM:
+            logger.info("MOCK_VLM is enabled. Skipping VLM model loading during startup.")
+        else:
+            vlm_service.load_model()
     except Exception as e:
-        logger.critical(f"FastAPI startup aborted: Failed to load VLM model. Details: {str(e)}")
-        raise e
+        logger.warning(f"Startup skipped VLM model initialization because it failed: {str(e)}")
 
     # 3. Start Redis Pub/Sub WebSockets background task
     import asyncio

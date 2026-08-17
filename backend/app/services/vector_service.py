@@ -25,8 +25,33 @@ class MockVectorStore:
 
     def similarity_search(self, document_id: str, query: str, k: int = 5) -> List[Dict[str, Any]]:
         chunks = self.get_chunks(document_id)
-        # In mock mode, return top K chunks sequentially as context
-        return chunks[:k]
+        # Ensure we enrich chunk copy with document_id
+        retrieved = []
+        for c in chunks[:k]:
+            retrieved.append({
+                "text": c["text"],
+                "metadata": {
+                    "page": c["metadata"].get("page", 1),
+                    "chunk_index": c["metadata"].get("chunk_index", 0),
+                    "document_id": document_id
+                }
+            })
+        return retrieved
+
+    def similarity_search_multiple(self, document_ids: List[str], query: str, k: int = 5) -> List[Dict[str, Any]]:
+        aggregated = []
+        for doc_id in document_ids:
+            chunks = self.get_chunks(doc_id)
+            for c in chunks:
+                aggregated.append({
+                    "text": c["text"],
+                    "metadata": {
+                        "page": c["metadata"].get("page", 1),
+                        "chunk_index": c["metadata"].get("chunk_index", 0),
+                        "document_id": doc_id
+                    }
+                })
+        return aggregated[:k]
 
     def has_document(self, document_id: str) -> bool:
         return document_id in self._db
@@ -149,13 +174,45 @@ class VectorService:
                     "text": doc.page_content,
                     "metadata": {
                         "page": doc.metadata.get("page", 1),
-                        "chunk_index": doc.metadata.get("chunk", 0)
+                        "chunk_index": doc.metadata.get("chunk", 0),
+                        "document_id": doc.metadata.get("document_id", document_id)
                     }
                 })
             logger.info(f"Retrieved {len(retrieved)} relevant context chunks.")
             return retrieved
         except Exception as e:
             logger.error(f"ChromaDB similarity search failed: {str(e)}")
+            return []
+
+    def similarity_search_multiple(self, document_ids: List[str], query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Runs similarity search on vector collection across multiple document_ids.
+        """
+        if settings.MOCK_VLM or self._db is None:
+            return self._mock_db.similarity_search_multiple(document_ids, query, k)
+
+        logger.info(f"Performing similarity search for documents {document_ids} (K={k})...")
+        try:
+            results = self._db.similarity_search(
+                query=query,
+                k=k,
+                filter={"document_id": {"$in": document_ids}}
+            )
+            
+            retrieved = []
+            for doc in results:
+                retrieved.append({
+                    "text": doc.page_content,
+                    "metadata": {
+                        "page": doc.metadata.get("page", 1),
+                        "chunk_index": doc.metadata.get("chunk", 0),
+                        "document_id": doc.metadata.get("document_id")
+                    }
+                })
+            logger.info(f"Retrieved {len(retrieved)} relevant context chunks across multiple documents.")
+            return retrieved
+        except Exception as e:
+            logger.error(f"ChromaDB multi similarity search failed: {str(e)}")
             return []
 
     def is_document_indexed(self, document_id: str) -> bool:

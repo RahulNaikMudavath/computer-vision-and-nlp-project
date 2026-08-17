@@ -171,7 +171,7 @@ function WorkspaceView({
                 <div style={{ height: '100%', minHeight: '500px' }}>
                   {selectedDoc.file_type === 'pdf' ? (
                     <iframe 
-                      src={`${API_BASE_URL}/document/${selectedDocId}/file#page=${activePage || 1}`} 
+                      src={`${API_BASE_URL}/document/${selectedDocId}/file?token=${localStorage.getItem('access_token')}#page=${activePage || 1}`} 
                       width="100%" 
                       height="100%" 
                       style={{ border: 'none', minHeight: '500px', borderRadius: '8px', background: '#1e293b' }}
@@ -180,7 +180,7 @@ function WorkspaceView({
                   ) : (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#1e293b', padding: '1rem', borderRadius: '8px', minHeight: '500px' }}>
                       <img 
-                        src={`${API_BASE_URL}/document/${selectedDocId}/file`} 
+                        src={`${API_BASE_URL}/document/${selectedDocId}/file?token=${localStorage.getItem('access_token')}`} 
                         alt="Document Preview" 
                         style={{ maxWidth: '100%', maxHeight: '600px', objectFit: 'contain', borderRadius: '4px' }}
                       />

@@ -35,6 +35,7 @@ class TestMockedAPI(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         Base.metadata.drop_all(bind=test_engine)
+        test_engine.dispose()
         if os.path.exists(test_db_file):
             try:
                 os.remove(test_db_file)

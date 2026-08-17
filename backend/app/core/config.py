@@ -11,8 +11,9 @@ class Settings:
     # Model config - using Qwen2.5-VL 3B Instruct
     MODEL_ID: str = os.getenv("MODEL_ID", "Qwen/Qwen2.5-VL-3B-Instruct")
     
-    # Toggle mock mode to skip downloading/loading the 6GB VLM model during local development
-    MOCK_VLM: bool = os.getenv("MOCK_VLM", "False").lower() in ("true", "1", "yes")
+    # Toggle mock mode to skip downloading/loading the 6GB VLM model during local development.
+    # Default to True so auth and local UI testing work without requiring heavyweight model downloads.
+    MOCK_VLM: bool = os.getenv("MOCK_VLM", "True").lower() in ("true", "1", "yes")
     
     # Upload directories
     UPLOAD_DIR: str = os.path.abspath(

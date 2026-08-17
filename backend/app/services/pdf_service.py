@@ -2,11 +2,13 @@ import os
 import time
 import logging
 import tempfile
+import fitz  # PyMuPDF
 from PIL import Image
 from pdf2image import convert_from_path
 from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError, PDFSyntaxError
 from app.core.config import settings
 from app.services.vlm_service import vlm_service
+from app.services.ocr import extract_text_from_pdf_scanned, extract_text_from_image_local
 from app.exceptions.handlers import InvalidPDFException, VLMInferenceException
 
 logger = logging.getLogger("document_ocr.pdf_service")
@@ -46,21 +48,26 @@ class PDFService:
                     fmt="png",
                     paths_only=True
                 )
-            except PDFInfoNotInstalledError:
-                logger.error("Poppler is not installed on the system or is missing from System PATH.")
-                raise VLMInferenceException(
-                    "Poppler dependency (system PDF converter) is missing. "
-                    "Please ensure poppler is installed and configured in System PATH."
+            except PDFInfoNotInstalledError as poppler_err:
+                logger.warning(
+                    "Poppler is not installed or not available in PATH. Falling back to PyMuPDF/VLM PDF OCR."
                 )
+                return await self._process_pdf_with_fitz_fallback(pdf_path)
             except (PDFPageCountError, PDFSyntaxError) as count_err:
                 logger.error(f"Failed to read PDF pages: {str(count_err)}")
                 if "encrypted" in str(count_err).lower() or "password" in str(count_err).lower():
                     raise InvalidPDFException("The uploaded PDF is encrypted/password-protected and cannot be processed.")
                 else:
-                    raise InvalidPDFException("The uploaded PDF is corrupted or invalid.")
+                    logger.warning(
+                        "PDF conversion failed, falling back to PyMuPDF/VLM PDF OCR."
+                    )
+                    return await self._process_pdf_with_fitz_fallback(pdf_path)
             except Exception as ex:
-                logger.error(f"Failed during PDF to image conversion: {str(ex)}")
-                raise InvalidPDFException(f"Failed to convert PDF pages: {str(ex)}")
+                logger.warning(
+                    "Failed during PDF to image conversion: %s. Falling back to PyMuPDF/VLM PDF OCR.",
+                    str(ex)
+                )
+                return await self._process_pdf_with_fitz_fallback(pdf_path)
                 
             total_pages = len(image_paths)
             logger.info(f"PDF split complete. Total pages: {total_pages}")
@@ -81,15 +88,23 @@ class PDFService:
                     # Load image file from disk and execute VLM character scanner
                     with Image.open(img_path) as pil_image:
                         logger.info(f"Inference started on page {page_num}...")
-                        page_text = await vlm_service.perform_ocr(pil_image)
-                        logger.info(f"Inference completed on page {page_num}.")
+                        try:
+                            page_text = await vlm_service.perform_ocr(pil_image)
+                        except Exception as ocr_err:
+                            logger.warning(
+                                "VLM OCR failed for PDF page %d. Falling back to local text extraction: %s",
+                                page_num,
+                                str(ocr_err)
+                            )
+                            if pil_image.mode != "RGB":
+                                pil_image = pil_image.convert("RGB")
+                            page_text = extract_text_from_image_local(pil_image)
                         
-                    results.append({
-                        "page": page_num,
-                        "text": page_text
-                    })
-                    full_text_parts.append(page_text)
-                    
+                        results.append({
+                            "page": page_num,
+                            "text": page_text
+                        })
+                        full_text_parts.append(page_text)
                 finally:
                     # Clean up individual page image immediately to free local disk space
                     if os.path.exists(img_path):
@@ -108,7 +123,6 @@ class PDFService:
                 "results": results,
                 "full_text": full_text
             }
-            
         finally:
             # Clear out the temporary subdirectory after parsing is complete
             if os.path.exists(temp_dir):
@@ -116,7 +130,54 @@ class PDFService:
                     os.rmdir(temp_dir)
                     logger.info(f"Removed temporary directory: {temp_dir}")
                 except OSError as dir_err:
-                    logger.warning(f"Could not remove temporary directory '{temp_dir}': {str(dir_err)}")
+                    logger.warning(f"Could not remove temporary directory '%s': %s", temp_dir, str(dir_err))
+        
+    async def _process_pdf_with_fitz_fallback(self, pdf_path: str) -> dict:
+        """
+        Fall back to PyMuPDF page rendering and VLM OCR when pdf2image / Poppler is unavailable.
+        """
+        logger.info("Starting PDF OCR fallback via PyMuPDF and VLM OCR.")
+        results = []
+        full_text_parts = []
+        try:
+            doc = fitz.open(pdf_path)
+            for i, page in enumerate(doc):
+                page_num = i + 1
+                # Render page to a pixmap (image)
+                pix = page.get_pixmap(dpi=150)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                try:
+                    page_text = await vlm_service.perform_ocr(img)
+                except Exception as ocr_err:
+                    logger.warning(
+                        "VLM OCR fallback failed for page %d. Falling back to local Tesseract OCR: %s",
+                        page_num,
+                        str(ocr_err)
+                    )
+                    page_text = extract_text_from_image_local(img)
+                
+                results.append({
+                    "page": page_num,
+                    "text": page_text
+                })
+                full_text_parts.append(page_text)
+            doc.close()
+        except Exception as e:
+            logger.error(f"Error in fitz fallback PDF extraction: {e}")
+            raise InvalidPDFException(
+                f"PDF OCR fallback failed: {str(e)}"
+            )
+
+        full_text = "\n\n".join([
+            f"--- Page {page_num} ---\n{text}" for page_num, text in zip(range(1, len(results) + 1), full_text_parts)
+        ])
+
+        return {
+            "pages": len(results),
+            "results": results,
+            "full_text": full_text
+        }
 
 # Instantiate PDFService singleton
 pdf_service = PDFService()

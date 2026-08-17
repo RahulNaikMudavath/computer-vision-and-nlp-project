@@ -20,6 +20,7 @@ class TestAuthDatabase(unittest.TestCase):
     def tearDown(self):
         self.session.close()
         Base.metadata.drop_all(self.engine)
+        self.engine.dispose()
 
     def test_create_user_with_settings(self):
         # Create a new user

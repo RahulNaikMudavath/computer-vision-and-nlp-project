@@ -12,6 +12,7 @@ from app.services.embedding_service import embedding_service
 from app.schemas.rag_schema import (
     DocumentChatRequest,
     DocumentChatResponse,
+    MultiDocumentChatRequest,
     DocumentMetadataResponse,
     ChunksListResponse,
     ChunkMetadataResponse,
@@ -69,6 +70,60 @@ async def chat_with_document(
         logger.warning(f"Failed to record relational RAG chat history: {str(ex)}")
         
     return chat_result
+
+
+@router.post(
+    "/documents/chat",
+    response_model=DocumentChatResponse,
+    summary="Chat with Multiple Uploaded Documents (Multi-RAG)",
+    description=(
+        "Ask natural language questions about multiple uploaded documents based on their UUID list. "
+        "The system performs semantic search, fetches relevant context chunks, constructs "
+        "a strict QA prompt, and uses the VLM model to answer. Owner only for all documents."
+    )
+)
+async def chat_with_multiple_documents(
+    request: MultiDocumentChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    logger.info(f"User '{current_user.email}' requested Multi-RAG chat for documents {request.document_ids}.")
+    
+    # 1. Enforce document ownership boundaries for all documents
+    docs = db.query(Document).filter(
+        Document.id.in_(request.document_ids),
+        Document.uploaded_by == current_user.id
+    ).all()
+    
+    if len(docs) != len(request.document_ids):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. One or more documents do not belong to you or do not exist."
+        )
+        
+    # 2. Run multi-chat pipeline
+    chat_result = await rag_service.chat_with_multiple_documents(
+        db=db,
+        document_ids=request.document_ids,
+        question=request.question
+    )
+    
+    # 3. Log Chat history in relational database (leaving document_id as None/Null)
+    try:
+        chat_log = ChatHistory(
+            document_id=None,
+            user_id=current_user.id,
+            question=request.question,
+            answer=chat_result["answer"],
+            sources=json.dumps(chat_result["sources"])
+        )
+        db.add(chat_log)
+        db.commit()
+    except Exception as ex:
+        logger.warning(f"Failed to record relational RAG multi-chat history: {str(ex)}")
+        
+    return chat_result
+
 
 
 @router.get(

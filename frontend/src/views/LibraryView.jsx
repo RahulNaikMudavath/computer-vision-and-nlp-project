@@ -23,8 +23,26 @@ function LibraryView({
   setSelectedDocId,
   setCurrentView,
   fileInputRef,
-  API_BASE_URL
+  API_BASE_URL,
+  selectedDocIds = [],
+  setSelectedDocIds
 }) {
+  const handleToggleSelectDoc = (id) => {
+    if (selectedDocIds.includes(id)) {
+      setSelectedDocIds(prev => prev.filter(x => x !== id));
+    } else {
+      setSelectedDocIds(prev => [...prev, id]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedDocIds.length === documents.length) {
+      setSelectedDocIds([]);
+    } else {
+      setSelectedDocIds(documents.map(doc => doc.id));
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div className="library-header-row">
@@ -32,13 +50,37 @@ function LibraryView({
           <h1>Document Library</h1>
           <p>Filter, sort, download and chat with indexed files.</p>
         </div>
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="btn-primary"
-          style={{ width: 'auto', padding: '0.6rem 1.2rem' }}
-        >
-          <FilePlus size={16} /> Upload New
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {selectedDocIds.length > 0 && (
+            <button 
+              onClick={() => setCurrentView('multi-workspace')}
+              className="btn-secondary"
+              style={{ 
+                width: 'auto', 
+                padding: '0.6rem 1.2rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.5rem', 
+                backgroundColor: 'var(--secondary)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#fff',
+                cursor: 'pointer',
+                fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+            >
+              <MessageSquare size={16} /> Chat Selected ({selectedDocIds.length})
+            </button>
+          )}
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-primary"
+            style={{ width: 'auto', padding: '0.6rem 1.2rem' }}
+          >
+            <FilePlus size={16} /> Upload New
+          </button>
+        </div>
       </div>
 
       {/* Filter Search bar */}
@@ -108,6 +150,14 @@ function LibraryView({
           <table className="premium-table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    onChange={handleSelectAll} 
+                    checked={documents.length > 0 && selectedDocIds.length === documents.length}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                </th>
                 <th>Filename</th>
                 <th>Type</th>
                 <th>Size</th>
@@ -119,6 +169,15 @@ function LibraryView({
             <tbody>
               {documents.map((doc) => (
                 <tr key={doc.id}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedDocIds.includes(doc.id)} 
+                      onChange={() => handleToggleSelectDoc(doc.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                  </td>
                   <td>
                     {renameId === doc.id ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

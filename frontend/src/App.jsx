@@ -9,13 +9,14 @@ import WorkspaceView from './views/WorkspaceView';
 import ProfileView from './views/ProfileView';
 import SettingsView from './views/SettingsView';
 import AdminView from './views/AdminView';
+import MultiWorkspaceView from './views/MultiWorkspaceView';
 
 // Component Imports
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import ActiveUploadsTracker from './components/ActiveUploadsTracker';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // =====================================================================
 // Axios Configuration with Request Interceptors
@@ -80,6 +81,12 @@ function App() {
   const [chatLoading, setChatLoading] = useState(false);
   const [renameId, setRenameId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
+
+  // Multi-RAG states
+  const [selectedDocIds, setSelectedDocIds] = useState([]);
+  const [multiChatQuestion, setMultiChatQuestion] = useState('');
+  const [multiChatHistory, setMultiChatHistory] = useState([]);
+  const [multiChatLoading, setMultiChatLoading] = useState(false);
   
   // Profile & Settings fields
   const [profileName, setProfileName] = useState('');
@@ -513,6 +520,34 @@ function App() {
     setChatLoading(false);
   };
 
+  const handleMultiChatSubmit = async (e) => {
+    e.preventDefault();
+    if (!multiChatQuestion.trim() || multiChatLoading || selectedDocIds.length === 0) return;
+    
+    const query = multiChatQuestion.trim();
+    setMultiChatQuestion('');
+    
+    const newChatHistory = [...multiChatHistory, { sender: 'user', text: query }];
+    setMultiChatHistory(newChatHistory);
+    setMultiChatLoading(true);
+    
+    try {
+      const res = await api.post('/documents/chat', {
+        document_ids: selectedDocIds,
+        question: query
+      });
+      
+      setMultiChatHistory([
+        ...newChatHistory,
+        { sender: 'vlm', text: res.data.answer, sources: res.data.sources }
+      ]);
+    } catch (err) {
+      console.error(err);
+      showToast('Multi-document inference failed.', 'error');
+    }
+    setMultiChatLoading(false);
+  };
+
   // =====================================================================
   // Settings & Profile Updates
   // =====================================================================
@@ -661,6 +696,25 @@ function App() {
             setSelectedDocId={setSelectedDocId}
             setCurrentView={setCurrentView}
             fileInputRef={fileInputRef}
+            API_BASE_URL={API_BASE_URL}
+            selectedDocIds={selectedDocIds}
+            setSelectedDocIds={setSelectedDocIds}
+          />
+        )}
+
+        {currentView === 'multi-workspace' && (
+          <MultiWorkspaceView 
+            selectedDocIds={selectedDocIds}
+            setSelectedDocIds={setSelectedDocIds}
+            documents={documents}
+            chatHistory={multiChatHistory}
+            setChatHistory={setMultiChatHistory}
+            chatLoading={multiChatLoading}
+            chatQuestion={multiChatQuestion}
+            setChatQuestion={setMultiChatQuestion}
+            handleChatSubmit={handleMultiChatSubmit}
+            chatEndRef={chatEndRef}
+            setCurrentView={setCurrentView}
             API_BASE_URL={API_BASE_URL}
           />
         )}
